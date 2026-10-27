@@ -1,0 +1,46 @@
+name: Build APK
+on:
+  workflow_dispatch:
+  push:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 저장소에 올려둔 project.zip(대소문자 무관)을 찾아 압축 해제
+      - name: Unzip project.zip
+        run: |
+          ZIP=$(find . -maxdepth 1 -type f -iname 'project.zip' | head -n 1)
+          if [ -z "$ZIP" ]; then
+            echo "::error::저장소 루트에서 project.zip 을 찾을 수 없습니다."
+            exit 1
+          fi
+          echo "압축 해제: $ZIP"
+          mkdir -p build_src
+          unzip -q -o "$ZIP" -d build_src
+          # zip 안에 최상위 폴더가 한 겹 더 있어도 settings.gradle.kts 위치를 자동으로 찾음
+          SETTINGS=$(find build_src -name 'settings.gradle.kts' | head -n 1)
+          if [ -z "$SETTINGS" ]; then
+            echo "::error::압축 안에서 settings.gradle.kts 를 찾을 수 없습니다."
+            exit 1
+          fi
+          echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.7
+
+      - name: Build debug APK
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iNavi3DS-Patcher-debug-apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
